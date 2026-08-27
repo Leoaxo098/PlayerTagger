@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "playertagger.mixin.client",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "EntityOutlineColorMixin",
+    "MinecraftClientOutlineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

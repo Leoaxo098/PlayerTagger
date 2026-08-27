@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "playertagger",
+  "version": "${version}",
+  "name": "PlayerTagger",
+  "description": "Locally tag players with configurable vanilla outlines.",
+  "authors": ["PlayerTagger contributors"],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["playertagger.PlayerTaggerClient"]
+  },
+  "mixins": [
+    {
+      "config": "playertagger.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
