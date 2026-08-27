@@ -1,10 +1,11 @@
 {
   "required": true,
-  "package": "playertagger.mixin.client",
+  "minVersion": "0.8",
+  "package": "net.playertagger.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "EntityOutlineColorMixin",
-    "MinecraftClientOutlineMixin"
+    "EntityGlowMixin",
+    "EntityOutlineColorMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -3,23 +3,28 @@
   "id": "playertagger",
   "version": "${version}",
   "name": "PlayerTagger",
-  "description": "Locally tag players with configurable vanilla outlines.",
-  "authors": ["PlayerTagger contributors"],
-  "contact": {},
+  "description": "Client-side utility mod that lets you tag players so they render with a purely local glowing outline. Nothing is sent to the server and no other player can ever tell you tagged them.",
+  "authors": [
+    "PlayerTagger Contributors"
+  ],
+  "contact": {
+    "homepage": "https://example.com/playertagger",
+    "sources": "https://example.com/playertagger"
+  },
   "license": "MIT",
+  "icon": "assets/playertagger/icon.png",
   "environment": "client",
   "entrypoints": {
-    "client": ["playertagger.PlayerTaggerClient"]
+    "client": [
+      "net.playertagger.PlayerTaggerClient"
+    ]
   },
   "mixins": [
-    {
-      "config": "playertagger.mixins.json",
-      "environment": "client"
-    }
+    "playertagger.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.18.4",
-    "minecraft": "~1.21.11",
+    "fabricloader": ">=0.18.1",
+    "minecraft": ">=1.21",
     "java": ">=21",
     "fabric-api": "*"
   }
