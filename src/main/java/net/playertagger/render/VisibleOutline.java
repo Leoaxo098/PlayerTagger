@@ -4,7 +4,6 @@ import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,10 +12,9 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.Framebuffer;
 import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gl.SimpleFramebuffer;
-import net.minecraft.client.render.OutputTarget;
 import net.minecraft.client.render.OverlayTexture;
 import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.RenderSetup;
+import net.minecraft.client.render.RenderPhase;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.render.entity.model.EntityModel;
@@ -53,7 +51,7 @@ public final class VisibleOutline {
             .build());
 
     private static final List<Stamp> STAMPS = new ArrayList<>();
-    private static final OutputTarget MASK_TARGET = new OutputTarget("PlayerTagger mask", () -> VisibleOutline.mask);
+    private static final RenderPhase.Target MASK_TARGET = new RenderPhase.Target("PlayerTagger mask", () -> VisibleOutline.mask);
     private static Framebuffer mask;
     private static boolean collecting;
 
@@ -94,13 +92,12 @@ public final class VisibleOutline {
             mask.copyDepthFrom(scene);
             stampVisibleModels();
 
-            var nearest = RenderSystem.getSamplerCache().get(FilterMode.NEAREST);
             try (var pass = device.createCommandEncoder().createRenderPass(
                     () -> "PlayerTagger outline", scene.getColorAttachmentView(), OptionalInt.empty())) {
                 pass.setPipeline(COMPOSITE);
-                pass.bindTexture("Mask", mask.getColorAttachmentView(), nearest);
-                pass.bindTexture("MaskDepth", mask.getDepthAttachmentView(), nearest);
-                pass.bindTexture("SceneDepth", scene.getDepthAttachmentView(), nearest);
+                pass.bindSampler("Mask", mask.getColorAttachmentView());
+                pass.bindSampler("MaskDepth", mask.getDepthAttachmentView());
+                pass.bindSampler("SceneDepth", scene.getDepthAttachmentView());
                 pass.draw(0, 3);
             }
         } finally {
@@ -119,9 +116,9 @@ public final class VisibleOutline {
             for (Stamp stamp : STAMPS) {
                 matrices.peek().copy(stamp.transform());
                 stamp.model().setAngles(stamp.state());
-                var setup = RenderSetup.builder(MASK).outputTarget(MASK_TARGET)
-                        .texture("Sampler0", stamp.skin()).build();
-                var layer = RenderLayer.of("playertagger_visible_mask", setup);
+                var setup = RenderLayer.MultiPhaseParameters.builder().target(MASK_TARGET)
+                        .texture(new RenderPhase.Texture(stamp.skin(), false)).build(false);
+                var layer = RenderLayer.of("playertagger_visible_mask", 16_384, MASK, setup);
                 // Alpha reserves zero for the background and stores how much to fill at distance.
                 double distance = Math.sqrt(stamp.state().squaredDistanceToCamera);
                 int coverage = 1 + (int) Math.round(254 * Math.clamp((distance - 24) / 24, 0.0, 1.0));

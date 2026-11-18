@@ -1,12 +1,12 @@
 # PlayerTagger
 
-PlayerTagger is a client-side Fabric mod for Minecraft 1.21.11 that helps you recognize friends or teammates in a crowd. Tag players to give the visible parts of their model a colored outline with a white rim. Opaque blocks occlude the effect, and invisible players are excluded. Player tags are stored locally.
+PlayerTagger is a client-side Fabric mod for Minecraft 1.21.9 that helps you recognize friends or teammates in a crowd. Tag players to give the visible parts of their model a colored outline with a white rim. Opaque blocks occlude the effect, and invisible players are excluded. Player tags are stored locally.
 
 ## Requirements and installation
 
-- Minecraft 1.21.11 and Java 21
+- Minecraft 1.21.9 and Java 21
 - Fabric Loader 0.18.1 or newer
-- Fabric API for Minecraft 1.21.11 (tested with `0.141.4+1.21.11`)
+- Fabric API `0.134.0+1.21.9` or newer for Minecraft 1.21.9
 
 Install Fabric Loader and place PlayerTagger and Fabric API in your `.minecraft/mods` folder. No server component is required.
 
