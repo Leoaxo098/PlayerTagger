@@ -96,46 +96,20 @@ public final class PlayerLookupUtil {
         return offlineUuid(username);
     }
 
-    /**
-     * Safely retrieves the player's name across all Minecraft 1.21.x versions,
-     * supporting both record accessors (1.21.2+) and legacy getters (1.21/1.21.1).
-     */
+    /** Returns the profile's name, or an empty string when the profile is missing. */
     public static String getProfileName(PlayerListEntry entry) {
         if (entry == null || entry.getProfile() == null) {
             return "";
         }
-        com.mojang.authlib.GameProfile profile = entry.getProfile();
-        try {
-            return profile.name();
-        } catch (NoSuchMethodError e) {
-            try {
-                java.lang.reflect.Method method = profile.getClass().getMethod("getName");
-                return (String) method.invoke(profile);
-            } catch (Throwable ignored) {
-                return "";
-            }
-        }
+        return entry.getProfile().getName();
     }
 
-    /**
-     * Safely retrieves the player's UUID across all Minecraft 1.21.x versions,
-     * supporting both record accessors (1.21.2+) and legacy getters (1.21/1.21.1).
-     */
+    /** Returns the profile UUID, or the deterministic fallback for a missing profile. */
     public static UUID getProfileId(PlayerListEntry entry) {
         if (entry == null || entry.getProfile() == null) {
             return offlineUuid("");
         }
-        com.mojang.authlib.GameProfile profile = entry.getProfile();
-        try {
-            return profile.id();
-        } catch (NoSuchMethodError e) {
-            try {
-                java.lang.reflect.Method method = profile.getClass().getMethod("getId");
-                return (UUID) method.invoke(profile);
-            } catch (Throwable ignored) {
-                return offlineUuid(getProfileName(entry));
-            }
-        }
+        return entry.getProfile().getId();
     }
 
     private static Optional<UUID> lookupViaMojangApi(String username) {

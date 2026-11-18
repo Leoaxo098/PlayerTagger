@@ -4,56 +4,55 @@ import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.Framebuffer;
-import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gl.SimpleFramebuffer;
-import net.minecraft.client.render.OutputTarget;
+import net.minecraft.client.gl.UniformType;
+import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.OverlayTexture;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.RenderSetup;
-import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.render.entity.model.EntityModel;
 import net.minecraft.client.render.entity.state.LivingEntityRenderState;
 import net.minecraft.client.util.BufferAllocator;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.Identifier;
+import org.joml.Vector4f;
 
 /** Draws a skin silhouette into a private mask, then colors its edges in screen space. */
 public final class VisibleOutline {
-    private static final RenderPipeline MASK = RenderPipelines.register(
-            RenderPipeline.builder(RenderPipelines.TRANSFORMS_AND_PROJECTION_SNIPPET)
+    private static final RenderPipeline MASK = RenderPipeline.builder()
                     .withLocation(Identifier.of("playertagger", "pipeline/visible_mask"))
                     .withVertexShader("core/rendertype_outline")
                     .withFragmentShader(Identifier.of("playertagger", "core/visible_mask"))
                     .withSampler("Sampler0")
+                    .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
+                    .withUniform("Projection", UniformType.UNIFORM_BUFFER)
                     .withVertexFormat(VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL, VertexFormat.DrawMode.QUADS)
                     .withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST)
                     .withDepthWrite(true)
                     .withCull(false)
-                    .build());
+                    .build();
 
-    private static final RenderPipeline COMPOSITE = RenderPipelines.register(RenderPipeline.builder()
+    private static final RenderPipeline COMPOSITE = RenderPipeline.builder()
             .withLocation(Identifier.of("playertagger", "pipeline/visible_outline"))
-            .withVertexShader("core/screenquad")
+            .withVertexShader(Identifier.of("playertagger", "core/visible_outline"))
             .withFragmentShader(Identifier.of("playertagger", "core/visible_outline"))
             .withSampler("Mask")
             .withSampler("MaskDepth")
             .withSampler("SceneDepth")
-            .withVertexFormat(VertexFormats.EMPTY, VertexFormat.DrawMode.TRIANGLES)
+            .withVertexFormat(VertexFormats.POSITION, VertexFormat.DrawMode.QUADS)
             .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
             .withDepthWrite(false)
+            .withCull(false)
             .withBlend(BlendFunction.TRANSLUCENT)
-            .build());
+            .build();
 
     private static final List<Stamp> STAMPS = new ArrayList<>();
-    private static final OutputTarget MASK_TARGET = new OutputTarget("PlayerTagger mask", () -> VisibleOutline.mask);
     private static Framebuffer mask;
     private static boolean collecting;
 
@@ -65,9 +64,9 @@ public final class VisibleOutline {
     }
 
     public static void submit(EntityModel<LivingEntityRenderState> model, LivingEntityRenderState state,
-            MatrixStack matrices, Identifier skin, int color) {
+            MatrixStack matrices, Identifier skin, int light, int color) {
         if (collecting) {
-            STAMPS.add(new Stamp(model, state, matrices.peek().copy(), skin, color));
+            STAMPS.add(new Stamp(model, state, matrices.peek().copy(), skin, light, color));
         }
     }
 
@@ -94,14 +93,17 @@ public final class VisibleOutline {
             mask.copyDepthFrom(scene);
             stampVisibleModels();
 
-            var nearest = RenderSystem.getSamplerCache().get(FilterMode.NEAREST);
+            var quadIndices = RenderSystem.getSequentialBuffer(VertexFormat.DrawMode.QUADS);
+            var quadIndexBuffer = quadIndices.getIndexBuffer(6);
             try (var pass = device.createCommandEncoder().createRenderPass(
                     () -> "PlayerTagger outline", scene.getColorAttachmentView(), OptionalInt.empty())) {
                 pass.setPipeline(COMPOSITE);
-                pass.bindTexture("Mask", mask.getColorAttachmentView(), nearest);
-                pass.bindTexture("MaskDepth", mask.getDepthAttachmentView(), nearest);
-                pass.bindTexture("SceneDepth", scene.getDepthAttachmentView(), nearest);
-                pass.draw(0, 3);
+                pass.bindSampler("Mask", mask.getColorAttachmentView());
+                pass.bindSampler("MaskDepth", mask.getDepthAttachmentView());
+                pass.bindSampler("SceneDepth", scene.getDepthAttachmentView());
+                pass.setVertexBuffer(0, RenderSystem.getQuadVertexBuffer());
+                pass.setIndexBuffer(quadIndexBuffer, quadIndices.getIndexType());
+                pass.drawIndexed(0, 0, 6, 1);
             }
         } finally {
             STAMPS.clear();
@@ -109,30 +111,45 @@ public final class VisibleOutline {
     }
 
     private static void stampVisibleModels() {
-        var previousColor = RenderSystem.outputColorTextureOverride;
-        var previousDepth = RenderSystem.outputDepthTextureOverride;
-        RenderSystem.outputColorTextureOverride = mask.getColorAttachmentView();
-        RenderSystem.outputDepthTextureOverride = mask.getDepthAttachmentView();
+        var transforms = RenderSystem.getDynamicUniforms().write(RenderSystem.getModelViewMatrix(),
+                new Vector4f(1.0f), RenderSystem.getModelOffset(), RenderSystem.getTextureMatrix(),
+                RenderSystem.getShaderLineWidth());
+        var mode = MASK.getVertexFormatMode();
+        var format = MASK.getVertexFormat();
+        var indices = RenderSystem.getSequentialBuffer(mode);
+        var textures = MinecraftClient.getInstance().getTextureManager();
+        var encoder = RenderSystem.getDevice().createCommandEncoder();
         try (var allocator = new BufferAllocator(16_384)) {
-            var buffers = VertexConsumerProvider.immediate(allocator);
             var matrices = new MatrixStack();
             for (Stamp stamp : STAMPS) {
-                matrices.peek().copy(stamp.transform());
+                matrices.peek().getPositionMatrix().set(stamp.transform().getPositionMatrix());
+                matrices.peek().getNormalMatrix().set(stamp.transform().getNormalMatrix());
                 stamp.model().setAngles(stamp.state());
-                var setup = RenderSetup.builder(MASK).outputTarget(MASK_TARGET)
-                        .texture("Sampler0", stamp.skin()).build();
-                var layer = RenderLayer.of("playertagger_visible_mask", setup);
+                var vertices = new BufferBuilder(allocator, mode, format);
                 // Alpha reserves zero for the background and stores how much to fill at distance.
                 double distance = Math.sqrt(stamp.state().squaredDistanceToCamera);
                 int coverage = 1 + (int) Math.round(254 * Math.clamp((distance - 24) / 24, 0.0, 1.0));
                 int maskColor = (coverage << 24) | (stamp.color() & 0xFFFFFF);
-                stamp.model().render(matrices, buffers.getBuffer(layer), stamp.state().light,
+                stamp.model().render(matrices, vertices, stamp.light(),
                         OverlayTexture.DEFAULT_UV, maskColor);
-                buffers.draw(layer);
+                try (var model = vertices.endNullable()) {
+                    if (model == null) continue;
+                    var vertexBuffer = format.uploadImmediateVertexBuffer(model.getBuffer());
+                    int indexCount = model.getDrawParameters().indexCount();
+                    var indexBuffer = indices.getIndexBuffer(indexCount);
+                    try (var pass = encoder.createRenderPass(() -> "PlayerTagger mask",
+                            mask.getColorAttachmentView(), OptionalInt.empty(),
+                            mask.getDepthAttachmentView(), OptionalDouble.empty())) {
+                        pass.setPipeline(MASK);
+                        RenderSystem.bindDefaultUniforms(pass);
+                        pass.setUniform("DynamicTransforms", transforms);
+                        pass.bindSampler("Sampler0", textures.getTexture(stamp.skin()).getGlTextureView());
+                        pass.setVertexBuffer(0, vertexBuffer);
+                        pass.setIndexBuffer(indexBuffer, indices.getIndexType());
+                        pass.drawIndexed(0, 0, indexCount, 1);
+                    }
+                }
             }
-        } finally {
-            RenderSystem.outputColorTextureOverride = previousColor;
-            RenderSystem.outputDepthTextureOverride = previousDepth;
         }
     }
 
@@ -146,5 +163,5 @@ public final class VisibleOutline {
     }
 
     private record Stamp(EntityModel<LivingEntityRenderState> model, LivingEntityRenderState state,
-                         MatrixStack.Entry transform, Identifier skin, int color) { }
+                         MatrixStack.Entry transform, Identifier skin, int light, int color) { }
 }
