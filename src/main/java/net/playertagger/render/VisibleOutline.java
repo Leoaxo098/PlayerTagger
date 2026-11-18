@@ -1,150 +1,184 @@
 package net.playertagger.render;
 
-import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.platform.DepthTestFunction;
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.OptionalInt;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gl.Defines;
 import net.minecraft.client.gl.Framebuffer;
-import net.minecraft.client.gl.RenderPipelines;
+import net.minecraft.client.gl.ShaderProgramKey;
 import net.minecraft.client.gl.SimpleFramebuffer;
-import net.minecraft.client.render.OutputTarget;
+import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.BufferRenderer;
+import net.minecraft.client.render.BuiltBuffer;
 import net.minecraft.client.render.OverlayTexture;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.RenderSetup;
-import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.render.VertexFormat;
 import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.render.entity.model.EntityModel;
 import net.minecraft.client.render.entity.state.LivingEntityRenderState;
 import net.minecraft.client.util.BufferAllocator;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.Identifier;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL14;
+import org.lwjgl.opengl.GL30;
 
-/** Draws a skin silhouette into a private mask, then colors its edges in screen space. */
+/** Writes the visible player silhouette into a private framebuffer before drawing its outline. */
 public final class VisibleOutline {
-    private static final RenderPipeline MASK = RenderPipelines.register(
-            RenderPipeline.builder(RenderPipelines.TRANSFORMS_AND_PROJECTION_SNIPPET)
-                    .withLocation(Identifier.of("playertagger", "pipeline/visible_mask"))
-                    .withVertexShader("core/rendertype_outline")
-                    .withFragmentShader(Identifier.of("playertagger", "core/visible_mask"))
-                    .withSampler("Sampler0")
-                    .withVertexFormat(VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL, VertexFormat.DrawMode.QUADS)
-                    .withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST)
-                    .withDepthWrite(true)
-                    .withCull(false)
-                    .build());
-
-    private static final RenderPipeline COMPOSITE = RenderPipelines.register(RenderPipeline.builder()
-            .withLocation(Identifier.of("playertagger", "pipeline/visible_outline"))
-            .withVertexShader("core/screenquad")
-            .withFragmentShader(Identifier.of("playertagger", "core/visible_outline"))
-            .withSampler("Mask")
-            .withSampler("MaskDepth")
-            .withSampler("SceneDepth")
-            .withVertexFormat(VertexFormats.EMPTY, VertexFormat.DrawMode.TRIANGLES)
-            .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
-            .withDepthWrite(false)
-            .withBlend(BlendFunction.TRANSLUCENT)
-            .build());
-
+    private static final ShaderProgramKey MASK = new ShaderProgramKey(
+            Identifier.of("playertagger", "core/visible_mask"),
+            VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL, Defines.EMPTY);
+    private static final ShaderProgramKey COMPOSITE = new ShaderProgramKey(
+            Identifier.of("playertagger", "core/visible_outline"), VertexFormats.POSITION, Defines.EMPTY);
     private static final List<Stamp> STAMPS = new ArrayList<>();
-    private static final OutputTarget MASK_TARGET = new OutputTarget("PlayerTagger mask", () -> VisibleOutline.mask);
+    private static BufferAllocator allocator;
     private static Framebuffer mask;
+    private static Framebuffer sceneSnapshot;
     private static boolean collecting;
 
     private VisibleOutline() { }
 
     public static void begin() {
-        STAMPS.clear();
+        clearStamps();
         collecting = true;
     }
 
     public static void submit(EntityModel<LivingEntityRenderState> model, LivingEntityRenderState state,
             MatrixStack matrices, Identifier skin, int color) {
-        if (collecting) {
-            STAMPS.add(new Stamp(model, state, matrices.peek().copy(), skin, color));
-        }
+        if (!collecting) return;
+        if (allocator == null) allocator = new BufferAllocator(16_384);
+
+        double distance = Math.sqrt(state.squaredDistanceToCamera);
+        int coverage = 1 + (int) Math.round(254 * Math.clamp((distance - 24) / 24, 0.0, 1.0));
+        int maskColor = (coverage << 24) | (color & 0xFFFFFF);
+        var vertices = new BufferBuilder(allocator, VertexFormat.DrawMode.QUADS,
+                VertexFormats.POSITION_COLOR_TEXTURE_OVERLAY_LIGHT_NORMAL);
+        // Both the model and its render state are reused by vanilla after this invocation.
+        model.render(matrices, vertices, 0, OverlayTexture.DEFAULT_UV, maskColor);
+        var buffer = vertices.endNullable();
+        if (buffer != null) STAMPS.add(new Stamp(buffer, skin));
     }
 
     public static void draw() {
         collecting = false;
         try {
             if (STAMPS.isEmpty()) return;
-            Framebuffer scene = MinecraftClient.getInstance().getFramebuffer();
-            if (scene.getDepthAttachmentView() == null || scene.getColorAttachmentView() == null) return;
+            var client = MinecraftClient.getInstance();
+            Framebuffer scene = client.getFramebuffer();
+            if (scene.getDepthAttachment() <= 0 || scene.getColorAttachment() <= 0) return;
+            if (GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING) != scene.fbo
+                    || GL11.glIsEnabled(GL11.GL_SCISSOR_TEST)) return;
+            var maskProgram = client.getShaderLoader().getOrCreateProgram(MASK);
+            var outlineProgram = client.getShaderLoader().getOrCreateProgram(COMPOSITE);
+            if (maskProgram == null || outlineProgram == null) return;
 
-            // Skip alternate targets whose depth doesn't match the main scene.
-            if (RenderSystem.outputDepthTextureOverride != null
-                    && RenderSystem.outputDepthTextureOverride != scene.getDepthAttachmentView()) return;
-            if (RenderSystem.outputColorTextureOverride != null
-                    && RenderSystem.outputColorTextureOverride != scene.getColorAttachmentView()) return;
+            int readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+            var previousProgram = RenderSystem.getShader();
+            int texture0 = RenderSystem.getShaderTexture(0);
+            int texture1 = RenderSystem.getShaderTexture(1);
+            int texture2 = RenderSystem.getShaderTexture(2);
+            boolean depthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+            boolean depthWrite = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+            int depthFunction = GL11.glGetInteger(GL11.GL_DEPTH_FUNC);
+            boolean culling = GL11.glIsEnabled(GL11.GL_CULL_FACE);
+            boolean blending = GL11.glIsEnabled(GL11.GL_BLEND);
+            int srcRgb = GL11.glGetInteger(GL14.GL_BLEND_SRC_RGB);
+            int dstRgb = GL11.glGetInteger(GL14.GL_BLEND_DST_RGB);
+            int srcAlpha = GL11.glGetInteger(GL14.GL_BLEND_SRC_ALPHA);
+            int dstAlpha = GL11.glGetInteger(GL14.GL_BLEND_DST_ALPHA);
+            try {
+                if (mask == null) {
+                    mask = new SimpleFramebuffer(scene.textureWidth, scene.textureHeight, true);
+                    mask.setClearColor(0, 0, 0, 0);
+                    sceneSnapshot = new SimpleFramebuffer(scene.textureWidth, scene.textureHeight, true);
+                } else if (mask.textureWidth != scene.textureWidth || mask.textureHeight != scene.textureHeight) {
+                    mask.resize(scene.textureWidth, scene.textureHeight);
+                    sceneSnapshot.resize(scene.textureWidth, scene.textureHeight);
+                }
+                RenderSystem.depthMask(true);
+                mask.clear();
+                mask.copyDepthFrom(scene);
+                // Sample a copy instead of reading the scene's attached depth during compositing.
+                sceneSnapshot.copyDepthFrom(scene);
+                mask.beginWrite(true);
+                RenderSystem.enableDepthTest();
+                RenderSystem.depthFunc(GL11.GL_LEQUAL);
+                RenderSystem.disableCull();
+                RenderSystem.disableBlend();
+                RenderSystem.setShader(maskProgram);
+                for (int i = 0; i < STAMPS.size(); i++) {
+                    Stamp stamp = STAMPS.get(i);
+                    RenderSystem.setShaderTexture(0, stamp.skin());
+                    // BufferRenderer takes ownership of the built buffer.
+                    STAMPS.set(i, null);
+                    BufferRenderer.drawWithGlobalProgram(stamp.buffer());
+                }
 
-            if (mask == null) {
-                mask = new SimpleFramebuffer("PlayerTagger mask", scene.textureWidth, scene.textureHeight, true);
-            } else if (mask.textureWidth != scene.textureWidth || mask.textureHeight != scene.textureHeight) {
-                mask.resize(scene.textureWidth, scene.textureHeight);
-            }
-            var device = RenderSystem.getDevice();
-            device.createCommandEncoder().clearColorTexture(mask.getColorAttachment(), 0);
-            mask.copyDepthFrom(scene);
-            stampVisibleModels();
-
-            var nearest = RenderSystem.getSamplerCache().get(FilterMode.NEAREST);
-            try (var pass = device.createCommandEncoder().createRenderPass(
-                    () -> "PlayerTagger outline", scene.getColorAttachmentView(), OptionalInt.empty())) {
-                pass.setPipeline(COMPOSITE);
-                pass.bindTexture("Mask", mask.getColorAttachmentView(), nearest);
-                pass.bindTexture("MaskDepth", mask.getDepthAttachmentView(), nearest);
-                pass.bindTexture("SceneDepth", scene.getDepthAttachmentView(), nearest);
-                pass.draw(0, 3);
+                scene.beginWrite(true);
+                RenderSystem.disableDepthTest();
+                RenderSystem.depthMask(false);
+                RenderSystem.enableBlend();
+                RenderSystem.defaultBlendFunc();
+                RenderSystem.setShader(outlineProgram);
+                RenderSystem.setShaderTexture(0, mask.getColorAttachment());
+                RenderSystem.setShaderTexture(1, mask.getDepthAttachment());
+                RenderSystem.setShaderTexture(2, sceneSnapshot.getDepthAttachment());
+                renderComposite();
+            } finally {
+                scene.beginWrite(true);
+                GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, readFramebuffer);
+                RenderSystem.setShader(previousProgram);
+                RenderSystem.setShaderTexture(0, texture0);
+                RenderSystem.setShaderTexture(1, texture1);
+                RenderSystem.setShaderTexture(2, texture2);
+                RenderSystem.depthMask(depthWrite);
+                RenderSystem.depthFunc(depthFunction);
+                if (depthTest) RenderSystem.enableDepthTest();
+                else RenderSystem.disableDepthTest();
+                if (culling) RenderSystem.enableCull();
+                else RenderSystem.disableCull();
+                RenderSystem.blendFuncSeparate(srcRgb, dstRgb, srcAlpha, dstAlpha);
+                if (blending) RenderSystem.enableBlend();
+                else RenderSystem.disableBlend();
             }
         } finally {
-            STAMPS.clear();
+            clearStamps();
         }
     }
 
-    private static void stampVisibleModels() {
-        var previousColor = RenderSystem.outputColorTextureOverride;
-        var previousDepth = RenderSystem.outputDepthTextureOverride;
-        RenderSystem.outputColorTextureOverride = mask.getColorAttachmentView();
-        RenderSystem.outputDepthTextureOverride = mask.getDepthAttachmentView();
-        try (var allocator = new BufferAllocator(16_384)) {
-            var buffers = VertexConsumerProvider.immediate(allocator);
-            var matrices = new MatrixStack();
-            for (Stamp stamp : STAMPS) {
-                matrices.peek().copy(stamp.transform());
-                stamp.model().setAngles(stamp.state());
-                var setup = RenderSetup.builder(MASK).outputTarget(MASK_TARGET)
-                        .texture("Sampler0", stamp.skin()).build();
-                var layer = RenderLayer.of("playertagger_visible_mask", setup);
-                // Alpha reserves zero for the background and stores how much to fill at distance.
-                double distance = Math.sqrt(stamp.state().squaredDistanceToCamera);
-                int coverage = 1 + (int) Math.round(254 * Math.clamp((distance - 24) / 24, 0.0, 1.0));
-                int maskColor = (coverage << 24) | (stamp.color() & 0xFFFFFF);
-                stamp.model().render(matrices, buffers.getBuffer(layer), stamp.state().light,
-                        OverlayTexture.DEFAULT_UV, maskColor);
-                buffers.draw(layer);
-            }
-        } finally {
-            RenderSystem.outputColorTextureOverride = previousColor;
-            RenderSystem.outputDepthTextureOverride = previousDepth;
+    private static void renderComposite() {
+        var vertices = new BufferBuilder(allocator, VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION);
+        vertices.vertex(-1, -1, 0);
+        vertices.vertex(3, -1, 0);
+        vertices.vertex(-1, 3, 0);
+        BufferRenderer.drawWithGlobalProgram(vertices.end());
+    }
+
+    private static void clearStamps() {
+        for (Stamp stamp : STAMPS) {
+            if (stamp != null) stamp.buffer().close();
         }
+        STAMPS.clear();
+        if (allocator != null) allocator.clear();
     }
 
     public static void close() {
+        collecting = false;
+        clearStamps();
+        if (allocator != null) {
+            allocator.close();
+            allocator = null;
+        }
         if (mask != null) {
             mask.delete();
             mask = null;
         }
-        STAMPS.clear();
-        collecting = false;
+        if (sceneSnapshot != null) {
+            sceneSnapshot.delete();
+            sceneSnapshot = null;
+        }
     }
 
-    private record Stamp(EntityModel<LivingEntityRenderState> model, LivingEntityRenderState state,
-                         MatrixStack.Entry transform, Identifier skin, int color) { }
+    private record Stamp(BuiltBuffer buffer, Identifier skin) { }
 }

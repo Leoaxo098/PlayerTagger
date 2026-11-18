@@ -106,7 +106,7 @@ public final class PlayerLookupUtil {
         }
         com.mojang.authlib.GameProfile profile = entry.getProfile();
         try {
-            return profile.name();
+            return profile.getName();
         } catch (NoSuchMethodError e) {
             try {
                 java.lang.reflect.Method method = profile.getClass().getMethod("getName");
@@ -127,7 +127,7 @@ public final class PlayerLookupUtil {
         }
         com.mojang.authlib.GameProfile profile = entry.getProfile();
         try {
-            return profile.id();
+            return profile.getId();
         } catch (NoSuchMethodError e) {
             try {
                 java.lang.reflect.Method method = profile.getClass().getMethod("getId");

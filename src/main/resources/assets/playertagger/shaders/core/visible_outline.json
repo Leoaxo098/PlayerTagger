@@ -1,0 +1,10 @@
+{
+    "vertex": "playertagger:core/visible_outline",
+    "fragment": "playertagger:core/visible_outline",
+    "samplers": [
+        { "name": "Sampler0" },
+        { "name": "Sampler1" },
+        { "name": "Sampler2" }
+    ],
+    "uniforms": []
+}
