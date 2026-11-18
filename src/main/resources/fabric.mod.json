@@ -3,13 +3,17 @@
   "id": "playertagger",
   "version": "${version}",
   "name": "PlayerTagger",
-  "description": "Client-side utility mod that lets you tag players so they render with a purely local glowing outline. Nothing is sent to the server and no other player can ever tell you tagged them.",
+  "description": "Recognize tagged players with a colored outline that respects opaque blocks and invisibility.",
   "authors": [
-    "PlayerTagger Contributors"
+    {
+      "name": "Leoaxo098",
+      "contact": {
+        "homepage": "https://github.com/Leoaxo098"
+      }
+    }
   ],
   "contact": {
-    "homepage": "https://example.com/playertagger",
-    "sources": "https://example.com/playertagger"
+    "sources": "https://github.com/Leoaxo098/PlayerTagger"
   },
   "license": "MIT",
   "icon": "assets/playertagger/icon.png",
@@ -24,7 +28,7 @@
   ],
   "depends": {
     "fabricloader": ">=0.18.1",
-    "minecraft": ">=1.21",
+    "minecraft": "1.21.11",
     "java": ">=21",
     "fabric-api": "*"
   }

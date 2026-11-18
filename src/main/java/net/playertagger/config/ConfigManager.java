@@ -100,9 +100,7 @@ public final class ConfigManager {
             if (config.getPlayers() == null) {
                 config.setPlayers(new java.util.ArrayList<>());
             }
-            if (config.getSettings() == null) {
-                config.setSettings(new PlayerTaggerConfig.Settings());
-            }
+
 
             return config;
         } catch (JsonSyntaxException | IOException e) {

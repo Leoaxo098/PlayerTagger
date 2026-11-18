@@ -22,9 +22,9 @@ import java.util.UUID;
  * GUIs — goes through here, which keeps the persistence logic in one spot
  * and makes it trivial to reason about when a save happens.</p>
  *
- * <p>All glow-affecting reads ({@link #isEnabled()}, {@link #isTagged(UUID)},
+ * <p>All label-affecting reads ({@link #isEnabled()}, {@link #isTagged(UUID)},
  * {@link #getColor(UUID)}) are cheap {@link Map} lookups so the renderer can
- * call them every frame without any caching layer; this is what makes glow
+ * call them every frame without any caching layer; this is what makes label
  * state update instantly on every trigger described in the spec (toggle,
  * add, remove, world load, (re)join, dimension change, respawn, etc.) —
  * there is no stale cache to invalidate in the first place.</p>
@@ -39,8 +39,6 @@ public final class PlayerTagManager {
     private final Map<UUID, TaggedPlayer> taggedPlayers = new LinkedHashMap<>();
 
     private volatile boolean enabled = true;
-    private volatile boolean showThroughWalls = true;
-    private volatile boolean showInvisiblePlayers = true;
 
     private PlayerTagManager() {
         loadFromDisk();
@@ -59,7 +57,7 @@ public final class PlayerTagManager {
     }
 
     /**
-     * Enables or disables the whole mod. Glow disappears/reappears the very
+     * Enables or disables the whole mod. Labels disappear/reappear the very
      * next frame because the renderer checks {@link #isEnabled()} directly;
      * commands keep working regardless of this flag.
      */
@@ -71,30 +69,6 @@ public final class PlayerTagManager {
     public boolean toggle() {
         setEnabled(!enabled);
         return enabled;
-    }
-
-    // ------------------------------------------------------------------
-    // Rendering settings
-    // ------------------------------------------------------------------
-
-    /** Whether tagged players should glow through walls (vanilla outline behavior). */
-    public boolean isShowThroughWalls() {
-        return showThroughWalls;
-    }
-
-    public void setShowThroughWalls(boolean showThroughWalls) {
-        this.showThroughWalls = showThroughWalls;
-        persist();
-    }
-
-    /** Whether a tagged player who is vanishing/invisible should still glow. */
-    public boolean isShowInvisiblePlayers() {
-        return showInvisiblePlayers;
-    }
-
-    public void setShowInvisiblePlayers(boolean showInvisiblePlayers) {
-        this.showInvisiblePlayers = showInvisiblePlayers;
-        persist();
     }
 
     // ------------------------------------------------------------------
@@ -184,8 +158,6 @@ public final class PlayerTagManager {
     private void loadFromDisk() {
         PlayerTaggerConfig config = configManager.load();
         this.enabled = config.isEnabled();
-        this.showThroughWalls = config.getSettings().isShowThroughWalls();
-        this.showInvisiblePlayers = config.getSettings().isShowInvisiblePlayers();
         this.taggedPlayers.clear();
         for (PlayerTaggerConfig.PlayerEntry entry : config.getPlayers()) {
             try {
@@ -211,11 +183,6 @@ public final class PlayerTagManager {
             entries.add(new PlayerTaggerConfig.PlayerEntry(player.uuid(), player.username(), player.color()));
         }
         config.setPlayers(entries);
-
-        PlayerTaggerConfig.Settings settings = new PlayerTaggerConfig.Settings();
-        settings.setShowThroughWalls(showThroughWalls);
-        settings.setShowInvisiblePlayers(showInvisiblePlayers);
-        config.setSettings(settings);
 
         configManager.save(config);
     }

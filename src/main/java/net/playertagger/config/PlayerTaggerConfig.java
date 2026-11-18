@@ -19,7 +19,6 @@ public final class PlayerTaggerConfig {
 
     private boolean enabled = true;
     private List<PlayerEntry> players = new ArrayList<>();
-    private Settings settings = new Settings();
 
     public boolean isEnabled() {
         return enabled;
@@ -38,17 +37,6 @@ public final class PlayerTaggerConfig {
 
     public void setPlayers(List<PlayerEntry> players) {
         this.players = players != null ? players : new ArrayList<>();
-    }
-
-    public Settings getSettings() {
-        if (settings == null) {
-            settings = new Settings();
-        }
-        return settings;
-    }
-
-    public void setSettings(Settings settings) {
-        this.settings = settings != null ? settings : new Settings();
     }
 
     /**
@@ -87,32 +75,4 @@ public final class PlayerTaggerConfig {
         }
     }
 
-    /**
-     * The {@code settings} object of the config file. Kept intentionally
-     * small today, but new toggles can be added here without touching the
-     * rest of the mod thanks to {@link ConfigManager}'s tolerant parsing.
-     */
-    public static final class Settings {
-        @SerializedName("showThroughWalls")
-        private boolean showThroughWalls = true;
-
-        @SerializedName("showInvisiblePlayers")
-        private boolean showInvisiblePlayers = true;
-
-        public boolean isShowThroughWalls() {
-            return showThroughWalls;
-        }
-
-        public void setShowThroughWalls(boolean showThroughWalls) {
-            this.showThroughWalls = showThroughWalls;
-        }
-
-        public boolean isShowInvisiblePlayers() {
-            return showInvisiblePlayers;
-        }
-
-        public void setShowInvisiblePlayers(boolean showInvisiblePlayers) {
-            this.showInvisiblePlayers = showInvisiblePlayers;
-        }
-    }
 }

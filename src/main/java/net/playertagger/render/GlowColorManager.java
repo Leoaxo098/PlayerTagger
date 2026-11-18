@@ -8,7 +8,7 @@ import java.util.Map;
  * {@code config/playertagger.json}) to the ARGB integers the renderer needs.
  *
  * <p>Keeping this in one small, well-documented class is what makes the
- * "each tagged player has their own glow color" requirement easy to extend
+ * "each tagged player has their own outline color" requirement easy to extend
  * later — for example wiring up a color picker GUI just means calling
  * {@link #isValidColor(String)} and {@link #resolve(String)} against
  * whatever the user picks, without touching the renderer at all.</p>
@@ -24,16 +24,16 @@ public final class GlowColorManager {
     private static final Map<String, Integer> PALETTE = new LinkedHashMap<>();
 
     static {
-        PALETTE.put("yellow", 0xFFFF55);
-        PALETTE.put("aqua", 0x55FFFF);
-        PALETTE.put("light_purple", 0xFF55FF);
-        PALETTE.put("green", 0x55FF55);
-        PALETTE.put("red", 0xFF5555);
-        PALETTE.put("gold", 0xFFAA00);
-        PALETTE.put("blue", 0x5555FF);
+        PALETTE.put("yellow", 0xFFFF33);
+        PALETTE.put("aqua", 0x33FFFF);
+        PALETTE.put("light_purple", 0xFF33FF);
+        PALETTE.put("green", 0x33FF55);
+        PALETTE.put("red", 0xFF3030);
+        PALETTE.put("gold", 0xFFAA22);
+        PALETTE.put("blue", 0x6677FF);
         PALETTE.put("white", 0xFFFFFF);
-        PALETTE.put("dark_green", 0x00AA00);
-        PALETTE.put("dark_purple", 0xAA00AA);
+        PALETTE.put("dark_green", 0x00E050);
+        PALETTE.put("dark_purple", 0xCE40FF);
     }
 
     private static final String DEFAULT_COLOR = "yellow";
@@ -56,7 +56,7 @@ public final class GlowColorManager {
 
     /**
      * Resolves a stored color name to an ARGB (opaque) integer suitable for
-     * {@code OutlineVertexConsumerProvider}. Falls back to the default
+     * the outline renderer. Falls back to the default
      * color for unrecognized names rather than throwing, since a config
      * hand-edited with a typo shouldn't break rendering.
      */

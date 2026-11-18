@@ -73,3 +73,26 @@ publishing {
         // Configure a local/remote publishing repository here if desired.
     }
 }
+
+// Run the dependency-free visibility regression checks as part of verification.
+tasks.register('visibilityTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.playertagger.render.OutlineVisibilityTest'
+}
+tasks.named('check') { dependsOn tasks.named('visibilityTest') }
+tasks.register('configMigrationTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.playertagger.config.ConfigMigrationTest'
+}
+tasks.named('check') { dependsOn tasks.named('configMigrationTest') }
+// The regression checks above are standalone Java programs, not JUnit tests.
+tasks.named('test') { failOnNoDiscoveredTests = false }
+
+tasks.register('glowColorTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.playertagger.render.GlowColorManagerTest'
+}
+tasks.named('check') { dependsOn tasks.named('glowColorTest') }

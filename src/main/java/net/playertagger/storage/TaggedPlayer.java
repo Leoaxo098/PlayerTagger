@@ -12,7 +12,7 @@ import java.util.UUID;
  *
  * @param uuid     the player's unique, stable Mojang UUID
  * @param username the last known username for display purposes
- * @param color    the identifier of the glow color assigned to this player,
+ * @param color    the identifier of the label color assigned to this player,
  *                 as understood by {@link net.playertagger.render.GlowColorManager}
  */
 public record TaggedPlayer(UUID uuid, String username, String color) {
@@ -33,7 +33,7 @@ public record TaggedPlayer(UUID uuid, String username, String color) {
     }
 
     /**
-     * Returns a copy of this tagged player with a new glow color.
+     * Returns a copy of this tagged player with a new label color.
      */
     public TaggedPlayer withColor(String newColor) {
         return new TaggedPlayer(this.uuid, this.username, newColor);

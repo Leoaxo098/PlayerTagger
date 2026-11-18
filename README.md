@@ -1,140 +1,36 @@
 # PlayerTagger
 
-A **client-side only** Fabric utility mod for Minecraft **1.21+** (1.21 – 1.21.11, Java 21). Tag
-specific players and see them with Minecraft's own vanilla glowing outline —
-purely on your own screen. Nothing is sent to the server, nothing touches
-scoreboard teams, and no other player can ever tell you tagged them.
+PlayerTagger is a client-side Fabric mod for Minecraft 1.21.11 that helps you recognize friends or teammates in a crowd. Tag players to give the visible parts of their model a colored outline with a white rim. Opaque blocks occlude the effect, and invisible players are excluded. Player tags are stored locally.
 
-## Requirements
+## Requirements and installation
 
-| Component      | Version                      |
-|-----------------|------------------------------|
-| Minecraft        | 1.21+ (1.21 – 1.21.11)       |
-| Fabric Loader    | 0.18.1+                      |
-| Fabric API       | 0.100.0+                     |
-| Java             | 21                           |
+- Minecraft 1.21.11 and Java 21
+- Fabric Loader 0.18.1 or newer
+- Fabric API for Minecraft 1.21.11 (tested with `0.141.4+1.21.11`)
 
-## Installation
-
-1. Install [Fabric Loader](https://fabricmc.net/) for Minecraft 1.21+.
-2. Download **PlayerTagger** and [Fabric API](https://modrinth.com/mod/fabric-api).
-3. Place both `.jar` files into your `.minecraft/mods` folder.
-4. Launch the game.
-
-## Building from Source
-
-```bash
-./gradlew build
-```
-
-The built jar will be located in `build/libs/playertagger-1.0.0.jar`.
+Install Fabric Loader and place PlayerTagger and Fabric API in your `.minecraft/mods` folder. No server component is required.
 
 ## Commands
 
-All commands are **client commands** (they work in singleplayer, LAN, and on
-any multiplayer server, and never touch the network):
+All commands are client-side and work in singleplayer and multiplayer:
 
-```
-/playertagger toggle              Enable/disable the whole mod
+```text
+/playertagger toggle              Enable or disable outlines
 /playertagger add <player>        Tag a player
-/playertagger remove <player>     Untag a player
-/playertagger list [page]         List tagged players, paginated
+/playertagger remove <player>     Remove a tag
+/playertagger list [page]         List tagged players
 ```
 
-`add`/`remove` support tab completion (online players for `add`, currently
-tagged players for `remove`).
+The add and remove commands support tab completion. Tagged players receive colors from a palette; their UUIDs, names, and colors persist across sessions and servers.
 
-## How the glow works
+## Visibility
 
-Vanilla Minecraft already has a "glowing outline" render pass — the same one
-used by the Glowing status effect. It's driven by two small, stable engine
-hooks: `Entity#isGlowing()` (should this entity get an outline?) and
-`Entity#getTeamColorValue()` (what color?). PlayerTagger uses two focused
-Mixins to answer both of those questions locally for tagged players, instead
-of writing to the entity's real (server-synced) data or to a scoreboard
-team:
+Tagged players are outlined only while the mod is enabled and the player is not invisible. The glow is drawn in screen pixels and fills the visible silhouette as the player recedes. World depth prevents the glow and its white rim from drawing over foreground blocks. Vanilla name tags and glowing effects are unchanged.
 
-- **`EntityGlowMixin`** — overrides `isGlowing()`'s return value to `true`
-  for tagged players when the mod is enabled. This never writes to the
-  entity's data tracker, so it's invisible over the network.
-- **`EntityOutlineColorMixin`** — overrides `getTeamColorValue()`'s return
-  value with the player's assigned color, without creating or touching any
-  scoreboard team.
+## Configuration
 
-Both mixins are documented in-file (why they exist, exactly what they touch,
-and why Fabric API alone doesn't expose an equivalent hook).
+`config/playertagger.json` stores `enabled` and the tagged players and their colors. Existing tags, assigned colors, and the enabled setting carry forward from version 1.0.0. The upgrade retires the `showThroughWalls` and `showInvisiblePlayers` settings. Unrecognized top-level fields are retained on save. Corrupt configuration files are backed up before defaults are created.
 
-Because glow state is computed **fresh every frame** from
-`PlayerTagManager` (a simple, cheap `HashMap` lookup) rather than cached,
-every "must update instantly" scenario in the spec — toggling the mod,
-adding/removing a tag, joining/leaving a world or server, changing
-dimension, respawning — is handled automatically. There is no cache to
-invalidate.
+## Building
 
-Since the vanilla outline pass ignores the depth buffer by design, it
-naturally shows through walls and still outlines invisible entities — which
-is exactly the vanilla Glowing effect's behavior. The two toggles in
-`settings` (`showThroughWalls`, `showInvisiblePlayers`) gate this behavior;
-see `GlowRenderer` for exactly how.
-
-**Known engine-imposed limits** (not implementation gaps): a dead player has
-no entity in the world to render, so nothing can be tagged-highlighted on
-the respawn screen; and vanilla itself hides most spectator entities from
-non-spectating clients, a policy this mod doesn't attempt to override.
-
-## Architecture
-
-```
-net.playertagger
-├── PlayerTaggerClient        Client mod entrypoint; wires everything together
-├── command/
-│   └── CommandRegistrar      Registers /playertagger and its subcommands
-├── config/
-│   ├── ConfigManager         Load/save/repair config/playertagger.json
-│   └── PlayerTaggerConfig    Plain data model matching the JSON schema
-├── manager/
-│   └── PlayerTagManager      Single source of truth: tagged players + enabled state
-├── render/
-│   ├── GlowRenderer          Pure decision logic used by the mixins
-│   └── GlowColorManager      Named color palette <-> ARGB resolution
-├── storage/
-│   └── TaggedPlayer          Immutable (uuid, username, color) record
-├── util/
-│   └── PlayerLookupUtil      Username -> UUID resolution, online player queries
-└── mixin/
-    ├── EntityGlowMixin           Forces the outline pass on for tagged players
-    └── EntityOutlineColorMixin   Supplies each tagged player's custom color
-```
-
-`PlayerTagManager` is the only class that talks to `ConfigManager`; commands,
-the renderer, and any future GUI all go through it. That single choke point
-is what keeps persistence bugs from spreading across the codebase, and it's
-where a friends list, groups, or per-player settings would hook in later
-without touching the renderer at all.
-
-## Config
-
-`config/playertagger.json` (auto-created on first run):
-
-```json
-{
-  "enabled": true,
-  "players": [
-    { "uuid": "...", "username": "Steve", "color": "yellow" }
-  ],
-  "settings": {
-    "showThroughWalls": true,
-    "showInvisiblePlayers": true
-  }
-}
-```
-
-- Created automatically if missing, loaded automatically on startup, and
-  saved automatically after every mutation.
-- If the file is corrupted or unparsable, it's backed up next to itself
-  (`playertagger.json.corrupted-<timestamp>.bak`) and replaced with a fresh
-  default rather than crashing the game.
-- A single malformed entry inside `players` is skipped individually instead
-  of discarding the whole list.
-- Unrecognized top-level JSON fields are preserved across saves, so a config
-  hand-edited (or edited by a future version of the mod) doesn't lose data.
+Run `./gradlew build` with Java 21. The jar is written to `build/libs/`.

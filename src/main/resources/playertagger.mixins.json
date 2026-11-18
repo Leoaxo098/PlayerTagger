@@ -3,11 +3,6 @@
   "minVersion": "0.8",
   "package": "net.playertagger.mixin",
   "compatibilityLevel": "JAVA_21",
-  "client": [
-    "EntityGlowMixin",
-    "EntityOutlineColorMixin"
-  ],
-  "injectors": {
-    "defaultRequire": 1
-  }
+  "client": ["EntityRenderStateMixin", "EntityRendererMixin", "LivingEntityRendererMixin", "WorldRendererMixin"],
+  "injectors": {"defaultRequire": 1}
 }
