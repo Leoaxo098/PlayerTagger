@@ -40,8 +40,8 @@ void main() {
             float whiteRadius = colorRadius + 1.5;
             if (distanceSquared > whiteRadius * whiteRadius) continue;
 
-            // A visible source pixel still cannot spread onto closer terrain.
-            if (texelFetch(MaskDepth, neighbor, 0).r > sceneDepth) continue;
+            // In reverse-Z, closer terrain has a larger depth value.
+            if (texelFetch(MaskDepth, neighbor, 0).r < sceneDepth) continue;
             closest = distanceSquared;
             rim = distanceSquared <= colorRadius * colorRadius
                     ? vec4(sampleColor.rgb, 1.0) : vec4(1.0);
