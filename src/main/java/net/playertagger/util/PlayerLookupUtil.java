@@ -2,9 +2,9 @@ package net.playertagger.util;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,15 +49,15 @@ public final class PlayerLookupUtil {
     }
 
     /**
-     * Finds the currently online {@link PlayerListEntry} with an exact,
+     * Finds the currently online {@link PlayerInfo} with an exact,
      * case-sensitive username match, if any.
      */
-    public static Optional<PlayerListEntry> findOnline(String username) {
-        ClientPlayNetworkHandler handler = MinecraftClient.getInstance().getNetworkHandler();
+    public static Optional<PlayerInfo> findOnline(String username) {
+        ClientPacketListener handler = Minecraft.getInstance().getConnection();
         if (handler == null) {
             return Optional.empty();
         }
-        for (PlayerListEntry entry : handler.getPlayerList()) {
+        for (PlayerInfo entry : handler.getOnlinePlayers()) {
             if (getProfileName(entry).equals(username)) {
                 return Optional.of(entry);
             }
@@ -67,11 +67,11 @@ public final class PlayerLookupUtil {
 
     /** All usernames currently visible in the tab list, for command suggestions. */
     public static Collection<String> onlineUsernames() {
-        ClientPlayNetworkHandler handler = MinecraftClient.getInstance().getNetworkHandler();
+        ClientPacketListener handler = Minecraft.getInstance().getConnection();
         if (handler == null) {
             return List.of();
         }
-        return handler.getPlayerList().stream()
+        return handler.getOnlinePlayers().stream()
                 .map(PlayerLookupUtil::getProfileName)
                 .filter(name -> !name.isEmpty())
                 .toList();
@@ -83,7 +83,7 @@ public final class PlayerLookupUtil {
      * offline-mode UUID so {@code /playertagger add} always succeeds.
      */
     public static UUID resolveUuid(String username) {
-        Optional<PlayerListEntry> online = findOnline(username);
+        Optional<PlayerInfo> online = findOnline(username);
         if (online.isPresent()) {
             return getProfileId(online.get());
         }
@@ -100,7 +100,7 @@ public final class PlayerLookupUtil {
      * Safely retrieves the player's name across all Minecraft 1.21.x versions,
      * supporting both record accessors (1.21.2+) and legacy getters (1.21/1.21.1).
      */
-    public static String getProfileName(PlayerListEntry entry) {
+    public static String getProfileName(PlayerInfo entry) {
         if (entry == null || entry.getProfile() == null) {
             return "";
         }
@@ -121,7 +121,7 @@ public final class PlayerLookupUtil {
      * Safely retrieves the player's UUID across all Minecraft 1.21.x versions,
      * supporting both record accessors (1.21.2+) and legacy getters (1.21/1.21.1).
      */
-    public static UUID getProfileId(PlayerListEntry entry) {
+    public static UUID getProfileId(PlayerInfo entry) {
         if (entry == null || entry.getProfile() == null) {
             return offlineUuid("");
         }

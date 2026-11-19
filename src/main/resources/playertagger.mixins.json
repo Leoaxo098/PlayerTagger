@@ -2,7 +2,7 @@
   "required": true,
   "minVersion": "0.8",
   "package": "net.playertagger.mixin",
-  "compatibilityLevel": "JAVA_21",
-  "client": ["EntityRenderStateMixin", "EntityRendererMixin", "LivingEntityRendererMixin", "WorldRendererMixin"],
+  "compatibilityLevel": "JAVA_25",
+  "client": ["EntityRenderStateMixin", "EntityRendererMixin", "LivingEntityRendererMixin", "RenderTypeInvoker", "WorldRendererMixin"],
   "injectors": {"defaultRequire": 1}
 }

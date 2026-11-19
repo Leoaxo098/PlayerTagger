@@ -2,7 +2,7 @@ package net.playertagger;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.playertagger.command.CommandRegistrar;
 import net.playertagger.manager.PlayerTagManager;
 import net.playertagger.render.VisibleOutline;
@@ -23,8 +23,8 @@ public final class PlayerTaggerClient implements ClientModInitializer {
         PlayerTagManager manager = PlayerTagManager.getInstance();
 
         CommandRegistrar.register();
-        WorldRenderEvents.BEFORE_ENTITIES.register(context -> VisibleOutline.begin());
-        WorldRenderEvents.BEFORE_TRANSLUCENT.register(context -> VisibleOutline.draw());
+        LevelRenderEvents.AFTER_OPAQUE_TERRAIN.register(context -> VisibleOutline.begin());
+        LevelRenderEvents.BEFORE_TRANSLUCENT_TERRAIN.register(context -> VisibleOutline.draw());
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
                 LOGGER.info("PlayerTagger active on join: {} player(s) tagged, mod {}.",
