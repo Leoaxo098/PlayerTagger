@@ -1,9 +1,10 @@
 #version 330
+#extension GL_ARB_separate_shader_objects : require
 
 uniform sampler2D Mask;
 uniform sampler2D MaskDepth;
 uniform sampler2D SceneDepth;
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
 
 void main() {
     ivec2 pixel = ivec2(gl_FragCoord.xy);
@@ -41,7 +42,7 @@ void main() {
             if (distanceSquared > whiteRadius * whiteRadius) continue;
 
             // A visible source pixel still cannot spread onto closer terrain.
-            if (texelFetch(MaskDepth, neighbor, 0).r > sceneDepth) continue;
+            if (texelFetch(MaskDepth, neighbor, 0).r < sceneDepth) continue;
             closest = distanceSquared;
             rim = distanceSquared <= colorRadius * colorRadius
                     ? vec4(sampleColor.rgb, 1.0) : vec4(1.0);

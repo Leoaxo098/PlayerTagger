@@ -1,6 +1,6 @@
 package net.playertagger.mixin;
 
-import net.minecraft.client.render.entity.state.EntityRenderState;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.playertagger.render.PlayerOutlineState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
